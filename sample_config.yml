@@ -1,0 +1,49 @@
+### EM Downpour Downloader Settings ###
+
+##
+# Downpour username
+##
+username: yourusername
+
+##
+# Downpour password
+##
+password: yourpassword
+
+##
+# Audiobook file type to download
+#
+# Options: m4b, mp3
+##
+filetype: m4b
+
+##
+# Location to store downloaded audiobook files
+##
+folder: ~/Audiobooks
+
+##
+# Template for folder structure created when saving audiobook 
+# files to the `folder` location provide above.
+#
+# Available variables:
+#  {author}   : Book author(s)
+#  {title}    : Book title
+#  {narrator} : Audiobook narrator/performer(s)
+#  {book_id}  : Downpour audiobook ID
+##
+folder_template: "{author}/{title}"
+
+
+### Advanced Settings ###
+
+##
+# How often to refresh cookies
+##
+cookie_expire_default:
+  hours: 1
+
+##
+# How often to clear API cache in seconds
+##
+expire_default: 3600

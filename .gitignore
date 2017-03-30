@@ -1,0 +1,7 @@
+downpour.conf
+.downpour_cookies
+screenshot.*
+*.log
+*.tmp
+*.pyc
+test.py
