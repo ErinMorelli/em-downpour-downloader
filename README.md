@@ -10,7 +10,7 @@ Download [Downpour.com](#disclaimer) audiobook files.
     git clone https://github.com/ErinMorelli/em-downpour-downloader.git
     ```
 
-2. Navigate into the folder created by step 2 and install the required python packages by running `pip`:
+2. Navigate into the folder created by step 1 and install the required python packages by running `pip`:
 
     ```
     pip install -r requirements.txt
@@ -24,7 +24,7 @@ Download [Downpour.com](#disclaimer) audiobook files.
 
 4. Open the `sample_config.yml` file with your favorite text editor and configure to suit your needs.
 
-5. Save the file as `config.yml` and move it to the `downpour-downloader` you created in step 2:
+5. Save the file as `config.yml` and move it to the `downpour-downloader` folder you created in step 2:
     
     ```
     mv config.yml ~/.config/downpour-downloader/config.yml

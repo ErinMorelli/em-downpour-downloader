@@ -7,7 +7,7 @@ Title       : EM Downpour Downloader
 Author      : Erin Morelli
 Email       : erin@erinmorelli.com
 License     : MIT
-Version     : 0.1
+Version     : 0.2
 """
 
 # Future
@@ -24,11 +24,11 @@ import argparse
 from datetime import datetime, timedelta
 
 # Third-party
-import wget
 import yaml
 import requests
 from lxml import html
 from tabulate import tabulate
+from clint.textui import progress
 from requests.packages import urllib3
 from requests_cache import CachedSession
 
@@ -38,7 +38,7 @@ __copyright__ = 'Copyright (c) 2017, Erin Morelli'
 __author__ = 'Erin Morelli'
 __email__ = 'erin@erinmorelli.com'
 __license__ = 'MIT'
-__version__ = '0.1'
+__version__ = '0.2'
 
 # Disable SSL warnings
 urllib3.disable_warnings()
@@ -445,7 +445,7 @@ class EMDownpourDownloader(object):
             error = 'Error: folder does not exist: {0}'
             sys.exit(error.format(folder))
 
-        # Check that directory is writable
+        # Check that directory is readable and writable
         if not os.access(folder, os.W_OK or os.R_OK):
             error = 'Error: folder does not have read/write permissions: {0}'
             sys.exit(error.format(folder))
@@ -586,6 +586,9 @@ class EMDownpourDownloader(object):
         if output is None:
             output = self.output
 
+        # Track downloaded books
+        downloaded_books = {}
+
         # Iterate over book IDs to download
         for idx, book_id in enumerate(book_ids):
             # Print new line between books
@@ -593,7 +596,13 @@ class EMDownpourDownloader(object):
                 print('\n', file=sys.stdout)
 
             # Download selected book
-            self.download_book(book_id)
+            downloaded_books[book_id] = self.download_book(book_id)
+
+        # Output formatted response
+        if output is self.__class__.RAW:
+            return downloaded_books
+        elif output is self.__class__.JSON:
+            return json.dumps(downloaded_books)
 
     def do_action(self, action=None):
         """Wrapper function to perform a specific action.
@@ -822,27 +831,38 @@ class EMDownpourDownloader(object):
         # Get download URL
         file_url = self.get_download_url(file_data)
 
-        # Set download progress bar
-        bar_style = wget.bar_adaptive if output is self.__class__.CLI else None
+        # Open file download stream
+        stream = requests.get(file_url, stream=True)
 
-        # Download file
-        temp_file_path = wget.download(
-            file_url,
-            bar=bar_style,
-            out=os.path.dirname(file_path)
-        )
+        # Read and download from file stream
+        with open(file_path, 'wb') as handle:
+            chunk_size = 1024
+
+            # Determine if we need a progress bar
+            if output is self.__class__.CLI:
+                # Set up progress bar data
+                total_length = int(stream.headers.get('content-length'))
+                expected_size = (total_length / chunk_size) + 1
+
+                # Set progress bar chunks
+                chunks = progress.bar(
+                    stream.iter_content(chunk_size=chunk_size),
+                    expected_size=expected_size
+                )
+            else:
+                # Use standard, silent stream
+                chunks = stream.iter_content(chunk_size=chunk_size)
+
+            # Download file
+            for chunk in chunks:
+                if chunk:
+                    handle.write(chunk)
+                    handle.flush()
 
         # Set error message:
         error = 'Error: there was a problem downloading the file: {0}'
 
         # Check that the file was downloaded
-        if not os.path.isfile(temp_file_path):
-            sys.exit(error.format(file_path))
-
-        # Rename the file
-        os.rename(temp_file_path, file_path)
-
-        # Check that the file was renamed
         if not os.path.isfile(file_path):
             sys.exit(error.format(file_path))
 
@@ -920,12 +940,10 @@ class EMDownpourDownloader(object):
             downloaded_files.append(file_path)
 
         # Return downloaded files
-        if output is self.__class__.RAW:
-            return downloaded_files
-        elif output is self.__class__.JSON:
-            return json.dumps({'files': downloaded_files})
-        elif output is self.CLI:
+        if output is self.CLI:
             print('+ Done.', file=sys.stdout)
+        else:
+            return downloaded_files
 
 
 class ScriptAction(argparse.Action):
