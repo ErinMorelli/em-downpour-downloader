@@ -27,10 +27,13 @@ from datetime import datetime, timedelta
 import yaml
 import requests
 from lxml import html
+from bs4 import BeautifulSoup
 from tabulate import tabulate
 from clint.textui import progress
 from requests.packages import urllib3
 from requests_cache import CachedSession
+
+from pprint import pprint
 
 # Script credits
 __title__ = 'EM Downpour Downloader'
@@ -80,15 +83,12 @@ class EMDownpourDownloader(object):
         # Get config file
         self.config_file = os.path.join(self.local_dir, 'config.yml')
 
+        # Set up HTML parser
+
+
         # Set Downpour connection info
         self.downpour = {}
         self.downpour['root'] = 'https://www.downpour.com/{0}'
-        self.downpour['login_url'] = self.downpour['root'].format(
-            'customerportal/account/loginPost'
-        )
-        self.downpour['ajax_root'] = self.downpour['root'].format(
-            'blackstone_custom/ajax/{0}'
-        )
         self.downpour['filetypes'] = ['m4b', 'mp3']
 
         # Get user config settings
@@ -308,35 +308,82 @@ class EMDownpourDownloader(object):
             RequestsCookieJar: Requests session cookie jar object from Downpour
 
         """
-        self.session.get(self.downpour['root'].format(None))
+        login_error = 'Error: unable to login to Downpour'
 
-        # Login to Downpour
-        self.session.post(
-            self.downpour['login_url'],
-            data={
-                'login[username]': self.config['username'],
-                'login[password]': self.config['password']
-            }
+        # Visit Downpour home page
+        home = self.session.get(self.downpour['root'].format(''))
+
+        # Set up login URL regex
+        home_regex = r'<a href\=\"({0}\/.+\/)\" >{1}<\/a>'.format(
+            re.escape(
+                self.downpour['root'].format('customer/account/login/referer')
+            ),
+            r'<span>Sign In<\/span>'
         )
 
-        # Set login error
-        login_error = 'Error: unable to login to Downpour'
+        # Look for login URL
+        home_match = re.search(home_regex, home.text, re.I)
+        login_url = home_match.group(1)
+
+        # Make sure we got a URL
+        if login_url is None:
+            sys.ext(login_error)
+
+        # Navigate to login page
+        post = self.session.get(login_url)
+
+        # Set up post URL regex
+        post_regex = r'<form action="(.+)" {0} {1} {2}>'.format(
+            'method="post"',
+            'id="login-form"',
+            'class="scaffold-form"'
+        )
+
+        # Look for post URL
+        post_match = re.search(post_regex, post.text)
+        post_url = post_match.group(1)
+
+        # Make sure we got a URL
+        if post_url is None:
+            sys.exit(login_error)
+
+        # Set up form key regex
+        key_regex = r'<input name="form_key" type="hidden" value="(\w+)" />'
+
+        # Look for form key
+        key_match = re.search(key_regex, post.text)
+        form_key = key_match.group(1)
+
+        # Make sure we got a form key
+        if form_key is None:
+            sys.exit(login_error)
+
+        # Login to Downpour
+        login = requests.post(
+            post_url,
+            data={
+                'form_key': form_key,
+                'login[username]': self.config['username'],
+                'login[password]': self.config['password'],
+                'send': ''
+            },
+            cookies=self.session.cookies
+        )
 
         # Attempt to retrieve user library
         library = self.session.get(
-            self.downpour['ajax_root'].format('ajaxGetCurrentCustomerLibrary')
+            self.downpour['root'].format('my-library'),
+            cookies=login.cookies
         )
 
-        # Check that login request was successful
-        try:
-            books = library.json()
-        except ValueError:
+        # Set up validation regex
+        valid_regex = r'<a href="{0}" title="Log Out" >'.format(
+            self.downpour['root'].format('customer/account/logout/'),
+        )
+
+        # # Look for login URL
+        if not re.search(valid_regex, library.text, re.I):
             sys.exit(login_error)
-        else:
-            if (not isinstance(books, dict) or
-                    'error' in books.keys() or
-                    'library' not in books.keys()):
-                sys.exit(login_error)
 
         # Return user cookies
         return library.cookies
@@ -478,7 +525,6 @@ class EMDownpourDownloader(object):
             'ID',
             'Title',
             'Author',
-            'Narrator',
             'Runtime',
             'Purchased'
         ]
@@ -490,14 +536,13 @@ class EMDownpourDownloader(object):
         for book in books:
             # Parse purchase date as datetime object
             purchase_date = datetime.strptime(
-                book['purchase_date_clean'], '%m-%d-%y')
+                book['purchase_date_string'], '%Y-%m-%d')
 
             # Set up table row
             table_data.append([
                 book['book_id'],
                 truncate(book['title']),
                 truncate(', '.join(book['author'].split('|'))),
-                truncate(', '.join(book['narrator'].split('|'))),
                 '{0} hr'.format(book['runtime']),
                 purchase_date.strftime('%d %b %y')
             ])
@@ -538,7 +583,7 @@ class EMDownpourDownloader(object):
 
         # Get purchase date as datetime object
         purchase_date = datetime.strptime(
-            book['purchase_date_clean'], '%m-%d-%y')
+            book['purchase_date_string'], '%Y-%m-%d')
 
         # Set output formatting
         form = u'{0:>15}: {1}'
@@ -552,20 +597,17 @@ class EMDownpourDownloader(object):
             form.format(
                 'Author(s)', ', '.join(book['author'].split('|'))),
             form.format(
-                'Narrator(s)', ', '.join(book['narrator'].split('|'))),
-            form.format(
                 'Runtime', '{0} hours'.format(book['runtime'])),
             form.format(
                 'Purchase Date', purchase_date.strftime('%d %B %Y')),
             form.format(
-                'Rental', 'Yes' if book['rental'] else 'No'),
+                'Released', 'Yes' if book['is_released'] else 'No'),
             form.format(
-                'Downloadable', 'Yes' if book['downloadable'] else 'No'),
+                'Rental', 'Yes' if book['is_rental'] else 'No'),
             form.format(
-                'DRM', 'Yes' if book['drm_required'] else 'No'),
+                'DRM', 'Yes' if book['drm'] else 'No'),
             form.format(
-                'Link',
-                self.downpour['root'].format(book['product_url'][1:])
+                'Link', book['link']
             )
         ]
 
@@ -637,34 +679,43 @@ class EMDownpourDownloader(object):
 
         """
         library = self.session.get(
-            self.downpour['ajax_root'].format('ajaxGetCurrentCustomerLibrary')
+            self.downpour['root'].format('my-library')
         )
 
-        # Get books
-        books = library.json()
+        # Parse HTML
+        soup = BeautifulSoup(library.text, 'html.parser')
 
-        # Set up book id array
-        book_ids = [b['book_id'] for b in books['library']]
-
-        # Get additional library data
-        library_data = self.session.post(
-            self.downpour['ajax_root'].format('ajaxGetProductDataBrief'),
-            data={
-                'bookIds[]': book_ids
-            }
+        # Find book data
+        books_html = soup.find_all(
+            'a',
+            attrs={'class': 'product-library-item-link'}
         )
 
-        # Get books data
-        books_data = library_data.json()
-
-        # Merge the two arrays
-        for book in books['library']:
-            for book_data in books_data:
-                if book_data['book_id'] == book['book_id']:
-                    book.update(book_data)
+        # Populate book list
+        books = []
+        for book in books_html:
+            attrs = book.attrs
+            books.append({
+                'author': attrs['data-author-display-string'],
+                'book_id': attrs['data-book_id'],
+                'drm': attrs['data-drm'] == '1',
+                'expiration': attrs['data-expiration'],
+                'is_released': attrs['data-is-released'] == '1',
+                'is_rental': attrs['data-is-rental'] == '1',
+                'itemid': attrs['data-itemid'],
+                'purchase_date': attrs['data-purchase-date'],
+                'purchase_date_string': attrs['data-purchase-date-string'],
+                'release_date': attrs['data-release-date'],
+                'remaining': attrs['data-remaining-string'],
+                'runtime': float(attrs['data-runtime']),
+                'sku': attrs['data-sku'],
+                'link': attrs['href'],
+                'title': attrs['title'],
+                'cover': book.find('img').attrs['src']
+            })
 
         # Return complete book list
-        return books['library']
+        return books
 
     def get_book_by_id(self, book_id):
         """Retrieve book from user Downpour library by book ID.
@@ -691,57 +742,38 @@ class EMDownpourDownloader(object):
             list: List of file part data for making download requests
 
         """
-        ajax_root = self.downpour['ajax_root']
+        dp_root = self.downpour['root']
 
         # Make request to get book files download information
-        dl_data = self.session.get(
-            ajax_root.format('ajaxGetCurrentCustomerLibraryDownloadBox'),
-            params={
-                'id': book['library_item_id']
-            }
+        dl_data = self.session.post(
+            dp_root.format('my-library/ajax/ajaxGetBookActionOptions'),
+            data={
+                'bookId': book['book_id']
+            },
+            cookies=self.session.cookies
         )
 
-        # Get HTML
-        dl_html = dl_data.json()['html']
+        # Get JSON
+        dl_json = dl_data.json()
 
-        # Parse HTML
-        tree = html.fromstring(dl_html)
+        # Check for status
+        if not dl_json['status']:
+            sys.exit('Error: there was a problem downloading the book')
 
-        # Set up xpath search string
-        dl_search = '//{row}/{cell}/div[1]'.format(
-            row="tr[{0} and {1}]".format(
-                "contains(@class, '{0}')".format(self.config['filetype']),
-                "contains(@class, 'file')"
-            ),
-            cell='td[@class="download"]'
-        )
+        # Get manifest
+        manifest = dl_json['manifest']
 
-        # Look for download links
-        downloads = tree.xpath(dl_search)
+        # Set up filetype regex
+        file_regex = r'\.{0}$'.format(self.config['filetype'])
 
-        # Set up onclick regex
-        onclick_regex = r"^bsa_cl_dl_file\(event, '(\w+)', '(\w+)'\);$"
+        # Return only correct file type
+        files = []
+        for file_name in manifest.keys():
+            if re.search(file_regex, file_name, re.I):
+                files.append(manifest[file_name])
 
-        # Set up file list
-        dl_file_data = []
-
-        # Get download information
-        for download in downloads:
-            # Get JS onclick action call
-            onclick = download.attrib['onclick']
-
-            # Parse the string
-            match = re.match(onclick_regex, onclick, re.I)
-
-            # Append to files list
-            if match is not None:
-                dl_file_data.append({
-                    'linkId': match.group(1),
-                    'itemId': match.group(2)
-                })
-
-        # Return list of files to download
-        return dl_file_data
+        # Return file list
+        return files
 
     def get_download_url(self, file_info):
         """Retrieve Downpour book file download URL.
@@ -754,17 +786,24 @@ class EMDownpourDownloader(object):
             str: Download URL for book part file
 
         """
-        dl_url = requests.get(  # Not a cached request as the URL expires
-            self.downpour['ajax_root'].format('ajaxGetDLSignedUrl'),
+        dl_url = self.session.post(  # Not a cached request as the URL expires
+            self.downpour['root'].format('my-library/ajax/ajaxDLBookBD'),
             cookies=self.session.cookies,
-            params=file_info
+            data={
+                'bdfile': file_info['filename'],
+                'niceName': file_info['prettyName']
+            }
         )
 
         # Get JSON response
         dl_json = dl_url.json()
 
+        # Check for success
+        if not dl_json['status']:
+            sys.exit('Error: there was a problem downloading the book')
+
         # Return download URL
-        return dl_json['url']
+        return dl_json['link']
 
     def get_book_path(self, book):
         """Get and create the download file path for a book.
@@ -792,7 +831,6 @@ class EMDownpourDownloader(object):
         book_folder = template.format(
             title=book['title'],
             author=', '.join(book['author'].split('|')),
-            narrator=', '.join(book['narrator'].split('|')),
             book_id=book['book_id']
         )
 
@@ -914,7 +952,7 @@ class EMDownpourDownloader(object):
 
             # Get file name
             file_name = '{book_title}{file_part}.{file_type}'.format(
-                book_title=book['title'],
+                book_title=file_data['title'],
                 file_part=file_part,
                 file_type=self.config['filetype']
             )
@@ -925,9 +963,8 @@ class EMDownpourDownloader(object):
             # Print status update
             if output is self.__class__.CLI:
                 print(
-                    '+ File [{part} of {parts}]: "{name}"'.format(
-                        part=idx + 1,
-                        parts=parts,
+                    '+ {count}: "{name}"'.format(
+                        count=file_data['countOf'],
                         name=file_name
                     ),
                     file=sys.stdout
@@ -936,8 +973,8 @@ class EMDownpourDownloader(object):
             # Download the file
             self.download_book_file(file_data, file_path)
 
-            # Add book to list
-            downloaded_files.append(file_path)
+            # # Add book to list
+            # downloaded_files.append(file_path)
 
         # Return downloaded files
         if output is self.CLI:
@@ -1022,7 +1059,7 @@ def get_version(extra=True):
     )
 
 
-def truncate(string, length=16):
+def truncate(string, length=20):
     """Truncate a string and add ellipsis, if-needed.
 
     Args:
