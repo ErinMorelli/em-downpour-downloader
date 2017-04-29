@@ -33,8 +33,6 @@ from clint.textui import progress
 from requests.packages import urllib3
 from requests_cache import CachedSession
 
-from pprint import pprint
-
 # Script credits
 __title__ = 'EM Downpour Downloader'
 __copyright__ = 'Copyright (c) 2017, Erin Morelli'
