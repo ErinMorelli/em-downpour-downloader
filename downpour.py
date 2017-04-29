@@ -971,8 +971,8 @@ class EMDownpourDownloader(object):
             # Download the file
             self.download_book_file(file_data, file_path)
 
-            # # Add book to list
-            # downloaded_files.append(file_path)
+            # Add book to list
+            downloaded_files.append(file_path)
 
         # Return downloaded files
         if output is self.CLI:
