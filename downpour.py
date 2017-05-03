@@ -135,10 +135,10 @@ class EMDownpourDownloader(object):
 
         # Load cache and initialize requests session
         self.session = None
-        self._load_requests_cache()
+        self._load_requests_cache(refresh=self._args['refresh'])
 
         # Login to Downpour and load session cookie jar
-        self._load_cookie_jar()
+        self._load_cookie_jar(refresh=self._args['refresh'])
 
     def _get_argparser(self):
         """Configure and return argument parser.
@@ -297,6 +297,7 @@ class EMDownpourDownloader(object):
 
         # Clear session cache
         if refresh:
+            print('Refreshing session...', file=sys.stdout)
             self.session.cache.clear()
 
     def _get_cookies(self):
@@ -472,6 +473,7 @@ class EMDownpourDownloader(object):
 
         # Get new cookies
         if refresh:
+            print('Refreshing cookies...', file=sys.stdout)
             # Retrieve cookies from Downpour
             cookies = self._get_cookies()
 
@@ -756,22 +758,39 @@ class EMDownpourDownloader(object):
 
         # Check for status
         if not dl_json['status']:
-            sys.exit('Error: there was a problem downloading the book')
+            sys.exit('Error: could not retrieve book download manifest')
 
         # Get manifest
         manifest = dl_json['manifest']
 
-        # Set up filetype regex
+        # Set up file regexes
         file_regex = r'\.{0}$'.format(self.config['filetype'])
+        file_part_regex = r'^File (\d+) of \d+$'
 
         # Return only correct file type
         files = []
         for file_name in manifest.keys():
             if re.search(file_regex, file_name, re.I):
-                files.append(manifest[file_name])
+                file = manifest[file_name]
 
-        # Return file list
-        return files
+                # Parse file part number
+                part = re.match(file_part_regex, file['countOf'], re.I)
+
+                # Check for match
+                if not part:
+                    sys.exit('Error: could not parse book download part')
+
+                # Set file part number
+                file['part'] = int(part.group(1))
+
+                # Add to files list
+                files.append(file)
+
+        # Sort files by part number
+        sorted_files = sorted(files, key=lambda k: k['part'], reverse=False)
+
+        # Return sorted file list
+        return sorted_files
 
     def get_download_url(self, file_info):
         """Retrieve Downpour book file download URL.
@@ -798,7 +817,7 @@ class EMDownpourDownloader(object):
 
         # Check for success
         if not dl_json['status']:
-            sys.exit('Error: there was a problem downloading the book')
+            sys.exit('Error: could not retrieve the book download URL(s)')
 
         # Return download URL
         return dl_json['link']
@@ -944,15 +963,18 @@ class EMDownpourDownloader(object):
             )
 
         # Download each book part
-        for idx, file_data in enumerate(book_file_data):
+        for file_data in book_file_data:
+            # Get file part number
+            part = file_data['part']
+
             # Get file part
-            file_part = ', Part {0}'.format(idx + 1) if parts > 1 else ''
+            file_part = ', Part {0}'.format(part) if parts > 1 else ''
 
             # Get file name
             file_name = '{book_title}{file_part}.{file_type}'.format(
                 book_title=file_data['title'],
                 file_part=file_part,
-                file_type=self.config['filetype']
+                file_type=file_data['ext']
             )
 
             # Set file path
