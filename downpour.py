@@ -7,7 +7,7 @@ Title       : EM Downpour Downloader
 Author      : Erin Morelli
 Email       : erin@erinmorelli.com
 License     : MIT
-Version     : 0.2
+Version     : 0.3
 """
 
 # Future
@@ -39,7 +39,7 @@ __copyright__ = 'Copyright (c) 2017, Erin Morelli'
 __author__ = 'Erin Morelli'
 __email__ = 'erin@erinmorelli.com'
 __license__ = 'MIT'
-__version__ = '0.2'
+__version__ = '0.3'
 
 # Disable SSL warnings
 urllib3.disable_warnings()
@@ -88,6 +88,9 @@ class EMDownpourDownloader(object):
         self.downpour = {}
         self.downpour['root'] = 'https://www.downpour.com/{0}'
         self.downpour['filetypes'] = ['m4b', 'mp3']
+        self.downpour['headers'] = {
+            'User-Agent': '%s/%s'.format(__title__, __version__)
+        }
 
         # Get user config settings
         self.config = None
@@ -295,6 +298,9 @@ class EMDownpourDownloader(object):
             allowable_methods=('GET', 'POST')
         )
 
+        # Set requests session headers
+        self.session.headers = self.downpour['headers']
+
         # Clear session cache
         if refresh:
             print('Refreshing session...', file=sys.stdout)
@@ -313,11 +319,9 @@ class EMDownpourDownloader(object):
         home = self.session.get(self.downpour['root'].format(''))
 
         # Set up login URL regex
-        home_regex = r'<a href\=\"({0}\/.+\/)\" >{1}<\/a>'.format(
-            re.escape(
-                self.downpour['root'].format('customer/account/login/referer')
-            ),
-            r'<span>Sign In<\/span>'
+        home_regex = r'<a href=\"({0}/.+/)\" >{1}</a>'.format(
+            r'https://www\.downpour\.com/customer/account/login/referer',
+            r'<span>Sign In</span>'
         )
 
         # Look for login URL
@@ -326,6 +330,7 @@ class EMDownpourDownloader(object):
 
         # Make sure we got a URL
         if login_url is None:
+            print('A')
             sys.ext(login_error)
 
         # Navigate to login page
@@ -344,6 +349,7 @@ class EMDownpourDownloader(object):
 
         # Make sure we got a URL
         if post_url is None:
+            print('B')
             sys.exit(login_error)
 
         # Set up form key regex
@@ -355,6 +361,7 @@ class EMDownpourDownloader(object):
 
         # Make sure we got a form key
         if form_key is None:
+            print('C')
             sys.exit(login_error)
 
         # Login to Downpour
@@ -366,7 +373,8 @@ class EMDownpourDownloader(object):
                 'login[password]': self.config['password'],
                 'send': ''
             },
-            cookies=self.session.cookies
+            cookies=self.session.cookies,
+            headers=self.downpour['headers']
         )
 
         # Attempt to retrieve user library
@@ -382,6 +390,7 @@ class EMDownpourDownloader(object):
 
         # # Look for login URL
         if not re.search(valid_regex, library.text, re.I):
+            print('D')
             sys.exit(login_error)
 
         # Return user cookies
@@ -687,14 +696,17 @@ class EMDownpourDownloader(object):
 
         # Find book data
         books_html = soup.find_all(
-            'a',
+            'span',
             attrs={'class': 'product-library-item-link'}
         )
+
+        from pprint import pprint
 
         # Populate book list
         books = []
         for book in books_html:
             attrs = book.attrs
+            runtime = attrs['data-runtime']
             books.append({
                 'author': attrs['data-author-display-string'],
                 'book_id': attrs['data-book_id'],
@@ -707,9 +719,9 @@ class EMDownpourDownloader(object):
                 'purchase_date_string': attrs['data-purchase-date-string'],
                 'release_date': attrs['data-release-date'],
                 'remaining': attrs['data-remaining-string'],
-                'runtime': float(attrs['data-runtime']),
+                'runtime': 0 if runtime == '' else float(runtime),
                 'sku': attrs['data-sku'],
-                'link': attrs['href'],
+                'link': attrs['data-href'],
                 'title': attrs['title'],
                 'cover': book.find('img').attrs['src']
             })
