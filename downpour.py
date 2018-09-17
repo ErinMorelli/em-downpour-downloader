@@ -96,7 +96,7 @@ class EMDownpourDownloader(object):
         self._load_config()
 
         # Check download folder read/write access
-        self._check_download_folder()
+        self._check_folder_permissions(self.config['folder_abs'])
 
         # Set requests caching data
         self._cache = {
@@ -436,11 +436,8 @@ class EMDownpourDownloader(object):
         # Fill the cookie jar
         self._fill_cookie_jar(cookies)
 
-    def _check_download_folder(self):
-        """Check that download folder exists and is writable."""
-        folder = self.config['folder_abs']
-
-        # Check that folder exists
+    def _check_folder_permissions(self, folder):
+        """Check that folder exists and is writable."""
         if not os.path.exists(folder):
             error = 'Error: folder does not exist: {0}'
             sys.exit(error.format(folder))
@@ -586,6 +583,9 @@ class EMDownpourDownloader(object):
         if output is None:
             output = self.output
 
+        # Track downloaded books
+        downloaded_books = {}
+
         # Iterate over book IDs to download
         for idx, book_id in enumerate(book_ids):
             # Print new line between books
@@ -593,7 +593,13 @@ class EMDownpourDownloader(object):
                 print('\n', file=sys.stdout)
 
             # Download selected book
-            self.download_book(book_id)
+            downloaded_books[book_id] = self.download_book(book_id)
+
+        # Output formatted response
+        if output is self.__class__.RAW:
+            return downloaded_books
+        elif output is self.__class__.JSON:
+            return json.dumps(downloaded_books)
 
     def do_action(self, action=None):
         """Wrapper function to perform a specific action.
@@ -822,6 +828,13 @@ class EMDownpourDownloader(object):
         # Get download URL
         file_url = self.get_download_url(file_data)
 
+        # Get target folder
+        out_folder = os.path.dirname(file_path)
+        print(out_folder, file=sys.stderr)
+
+        # Check folder permissions
+        self._check_folder_permissions(out_folder)
+
         # Set download progress bar
         bar_style = wget.bar_adaptive if output is self.__class__.CLI else None
 
@@ -829,7 +842,7 @@ class EMDownpourDownloader(object):
         temp_file_path = wget.download(
             file_url,
             bar=bar_style,
-            out=os.path.dirname(file_path)
+            out=out_folder
         )
 
         # Set error message:
@@ -920,12 +933,10 @@ class EMDownpourDownloader(object):
             downloaded_files.append(file_path)
 
         # Return downloaded files
-        if output is self.__class__.RAW:
-            return downloaded_files
-        elif output is self.__class__.JSON:
-            return json.dumps({'files': downloaded_files})
-        elif output is self.CLI:
+        if output is self.CLI:
             print('+ Done.', file=sys.stdout)
+        else:
+            return downloaded_files
 
 
 class ScriptAction(argparse.Action):
