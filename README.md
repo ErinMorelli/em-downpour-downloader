@@ -79,5 +79,3 @@ To download multiple audiobooks at once, you can specify additional `ID` values 
 [Downpour.com](http://www.downpour.com/) and Downpour are trademarks of Blackstone Audio, Inc., which is not affiliated with the maker of this product and does not endorse this product.
 
 EM Downpour Downloader is free, open source software and is distributed under the [MIT license](https://opensource.org/licenses/MIT).
-
-EM Downpour Downloader is created and maintained by [Erin Morelli](https://www.erinmorelli.com) (Twitter: [@ErinMorelli](http://twitter.com/ErinMorelli)).
