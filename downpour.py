@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Copyright (c) 2017 Erin Morelli.
+Copyright (c) 2017-2018 Erin Morelli.
 
 Title       : EM Downpour Downloader
 Author      : Erin Morelli
 Email       : erin@erinmorelli.com
 License     : MIT
-Version     : 0.3
+Version     : 0.2
 """
 
 # Future
@@ -35,11 +35,11 @@ from requests_cache import CachedSession
 
 # Script credits
 __title__ = 'EM Downpour Downloader'
-__copyright__ = 'Copyright (c) 2017, Erin Morelli'
+__copyright__ = 'Copyright (c) 2017-2018, Erin Morelli'
 __author__ = 'Erin Morelli'
 __email__ = 'erin@erinmorelli.com'
 __license__ = 'MIT'
-__version__ = '0.3'
+__version__ = '0.2'
 
 # Disable SSL warnings
 urllib3.disable_warnings()
@@ -81,11 +81,8 @@ class EMDownpourDownloader(object):
         # Get config file
         self.config_file = os.path.join(self.local_dir, 'config.yml')
 
-        # Set up HTML parser
-
-
         # Set Downpour connection info
-        self.downpour = {}
+        self.downpour = dict()
         self.downpour['root'] = 'https://www.downpour.com/{0}'
         self.downpour['filetypes'] = ['m4b', 'mp3']
         self.downpour['headers'] = {
@@ -219,6 +216,16 @@ class EMDownpourDownloader(object):
             ),
             choices=self.downpour['filetypes']
         )
+        argparser.add_argument(
+            '-d', '--desc',
+            help='sort library in descending order by purchase date',
+            action='store_true'
+        )
+        argparser.add_argument(
+            '-c', '--count',
+            help='specify number of books to return from library',
+            type=int
+        )
 
         # Return argument parser
         return argparser
@@ -249,6 +256,10 @@ class EMDownpourDownloader(object):
             for config_key in self.config.keys():
                 if config_key in self._args.keys():
                     self.config[config_key] = self._args[config_key]
+
+            # Always refresh for download requests
+            if self._args['action'] == 'download':
+                self._args['refresh'] = True
 
             # Check for JSON output flag
             if self._args['json']:
@@ -303,7 +314,6 @@ class EMDownpourDownloader(object):
 
         # Clear session cache
         if refresh:
-            print('Refreshing session...', file=sys.stdout)
             self.session.cache.clear()
 
     def _get_cookies(self):
@@ -330,14 +340,13 @@ class EMDownpourDownloader(object):
 
         # Make sure we got a URL
         if login_url is None:
-            print('A')
-            sys.ext(login_error)
+            sys.exit(login_error)
 
         # Navigate to login page
         post = self.session.get(login_url)
 
         # Set up post URL regex
-        post_regex = r'<form action="(.+)" {0} {1} {2}>'.format(
+        post_regex = r'<form action="(.+)"\s+{0} {1} {2}>'.format(
             'method="post"',
             'id="login-form"',
             'class="scaffold-form"'
@@ -349,7 +358,6 @@ class EMDownpourDownloader(object):
 
         # Make sure we got a URL
         if post_url is None:
-            print('B')
             sys.exit(login_error)
 
         # Set up form key regex
@@ -361,7 +369,6 @@ class EMDownpourDownloader(object):
 
         # Make sure we got a form key
         if form_key is None:
-            print('C')
             sys.exit(login_error)
 
         # Login to Downpour
@@ -390,7 +397,6 @@ class EMDownpourDownloader(object):
 
         # # Look for login URL
         if not re.search(valid_regex, library.text, re.I):
-            print('D')
             sys.exit(login_error)
 
         # Return user cookies
@@ -482,7 +488,6 @@ class EMDownpourDownloader(object):
 
         # Get new cookies
         if refresh:
-            print('Refreshing cookies...', file=sys.stdout)
             # Retrieve cookies from Downpour
             cookies = self._get_cookies()
 
@@ -519,6 +524,12 @@ class EMDownpourDownloader(object):
 
         # Get books from Downpour
         books = self.get_library()
+
+        # Handle CLI args
+        if self._args['desc']:
+            books = list(reversed(books))
+        if self._args['count']:
+            books = books[:self._args['count']]
 
         # If we want a non-CLI response, stop here
         if output is self.__class__.RAW:
@@ -895,24 +906,12 @@ class EMDownpourDownloader(object):
         # Get download URL
         file_url = self.get_download_url(file_data)
 
-<<<<<<< HEAD
         # Get target folder
         out_folder = os.path.dirname(file_path)
-        print(out_folder, file=sys.stderr)
 
         # Check folder permissions
         self._check_folder_permissions(out_folder)
 
-        # Set download progress bar
-        bar_style = wget.bar_adaptive if output is self.__class__.CLI else None
-
-        # Download file
-        temp_file_path = wget.download(
-            file_url,
-            bar=bar_style,
-            out=out_folder
-        )
-=======
         # Open file download stream
         stream = requests.get(file_url, stream=True)
 
@@ -940,7 +939,6 @@ class EMDownpourDownloader(object):
                 if chunk:
                     handle.write(chunk)
                     handle.flush()
->>>>>>> 9abdae4e15bd27539e2fbbb95f2e43a8438f6945
 
         # Set error message:
         error = 'Error: there was a problem downloading the file: {0}'
