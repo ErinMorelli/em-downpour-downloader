@@ -23,13 +23,12 @@ filetype: m4b
 folder: ~/Audiobooks
 
 ##
-# Template for folder structure created when saving audiobook 
+# Template for folder structure created when saving audiobook
 # files to the `folder` location provide above.
 #
 # Available variables:
 #  {author}   : Book author(s)
 #  {title}    : Book title
-#  {narrator} : Audiobook narrator/performer(s)
 #  {book_id}  : Downpour audiobook ID
 ##
 folder_template: "{author}/{title}"
