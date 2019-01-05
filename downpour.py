@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Copyright (c) 2017-2018 Erin Morelli.
+Copyright (c) 2017-2019, Erin Morelli.
 
 Title       : EM Downpour Downloader
 Author      : Erin Morelli
@@ -35,7 +35,7 @@ from requests_cache import CachedSession
 
 # Script credits
 __title__ = 'EM Downpour Downloader'
-__copyright__ = 'Copyright (c) 2017-2018, Erin Morelli'
+__copyright__ = 'Copyright (c) 2017-2019, Erin Morelli'
 __author__ = 'Erin Morelli'
 __email__ = 'erin@erinmorelli.com'
 __license__ = 'MIT'
