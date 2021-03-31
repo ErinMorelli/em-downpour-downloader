@@ -329,7 +329,7 @@ class EMDownpourDownloader(object):
         home = self.session.get(self.downpour['root'].format(''))
 
         # Set up login URL regex
-        home_regex = r'<a href=\"({0}/.+/)\" >{1}</a>'.format(
+        home_regex = r'<a href=\"({0}/.+/)\">{1}</a>'.format(
             r'https://www\.downpour\.com/customer/account/login/referer',
             r'<span>Sign In</span>'
         )
@@ -391,7 +391,7 @@ class EMDownpourDownloader(object):
         )
 
         # Set up validation regex
-        valid_regex = r'<a href="{0}" title="Log Out" >'.format(
+        valid_regex = r'<a href="{0}" title="Log Out">'.format(
             self.downpour['root'].format('customer/account/logout/'),
         )
 
