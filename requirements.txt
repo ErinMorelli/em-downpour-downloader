@@ -1,6 +1,6 @@
 beautifulsoup4==4.5.3
 clint==0.5.1
-lxml==4.6.2
+lxml==4.6.3
 pyyaml>=4.2b1
 requests>=2.20.0
 requests-cache==0.4.13
