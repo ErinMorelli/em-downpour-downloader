@@ -1,24 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Copyright (c) 2017-2019, Erin Morelli.
+Copyright (c) 2017-2021, Erin Morelli.
 
 Title       : EM Downpour Downloader
 Author      : Erin Morelli
-Email       : erin@erinmorelli.com
+Email       : me@erin.dev
 License     : MIT
-Version     : 0.2
+Version     : 0.3
 """
-
-# Future
-from __future__ import print_function
 
 # Built-ins
 import os
 import re
 import sys
 import json
-import codecs
 import pickle
 import argparse
 from datetime import datetime, timedelta
@@ -26,7 +22,7 @@ from datetime import datetime, timedelta
 # Third-party
 import yaml
 import requests
-from lxml import html
+import animation
 from bs4 import BeautifulSoup
 from tabulate import tabulate
 from clint.textui import progress
@@ -35,19 +31,14 @@ from requests_cache import CachedSession
 
 # Script credits
 __title__ = 'EM Downpour Downloader'
-__copyright__ = 'Copyright (c) 2017-2019, Erin Morelli'
+__copyright__ = 'Copyright (c) 2017-2021, Erin Morelli'
 __author__ = 'Erin Morelli'
-__email__ = 'erin@erinmorelli.com'
+__email__ = 'me@erin.dev'
 __license__ = 'MIT'
-__version__ = '0.2'
+__version__ = '0.3'
 
 # Disable SSL warnings
 urllib3.disable_warnings()
-
-# Set up UTF-8 encoding for Python 2
-if sys.version_info[0] < 3:
-    __writer__ = codecs.getwriter('utf8')
-    sys.stdout = __writer__(sys.stdout)
 
 
 class EMDownpourDownloader(object):
@@ -86,7 +77,7 @@ class EMDownpourDownloader(object):
         self.downpour['root'] = 'https://www.downpour.com/{0}'
         self.downpour['filetypes'] = ['m4b', 'mp3']
         self.downpour['headers'] = {
-            'User-Agent': '%s/%s'.format(__title__, __version__)
+            'User-Agent': f'{__title__}/{__version__}'
         }
 
         # Get user config settings
@@ -106,10 +97,7 @@ class EMDownpourDownloader(object):
             'expire_default': 3600,  # 1 hour in seconds
             'file': os.path.join(
                 self.local_dir,
-                '.downpour_cache_v{major}{minor}'.format(
-                    major=sys.version_info[0],
-                    minor=sys.version_info[1]
-                )
+                f'.downpour_cache_v{sys.version_info[0]}{sys.version_info[1]}'
             )
         }
 
@@ -151,16 +139,11 @@ class EMDownpourDownloader(object):
 
         # Set up command choices help
         for choice in self._script_actions.keys():
-            action_help += '  {key:21} {desc}\n'.format(
-                key=choice,
-                desc=self._script_actions[choice]
-            )
+            action_help += f'  {choice:21} {self._script_actions[choice]}\n'
 
         # Set up script usage and help output
-        help_output = '{usage}\n\n{action_help}'.format(
-            usage='%(prog)s <command> [book ID(s)] [options]',
-            action_help=action_help
-        )
+        help_output = f'%(prog)s <command> [book ID(s)] [options]' \
+                      f'\n\n{action_help}'
 
         # Set up argument parser
         argparser = DownpourArgumentParser(
@@ -210,10 +193,8 @@ class EMDownpourDownloader(object):
             '-t', '--filetype',
             metavar='FILETYPE',
             default=self.config['filetype'],
-            help='{0} [{1}].'.format(
-                'specify which audiobook filetype to download',
-                ', '.join(self.downpour['filetypes'])
-            ),
+            help=f'specify which audiobook filetype to download '
+                 f'[{", ".join(self.downpour["filetypes"])}].',
             choices=self.downpour['filetypes']
         )
         argparser.add_argument(
@@ -229,6 +210,13 @@ class EMDownpourDownloader(object):
 
         # Return argument parser
         return argparser
+    
+    def _error(self, message, reason=None) -> object:
+        """??"""
+        error = f'ERROR: {message}'
+        if reason:
+            error += f' - {reason}'
+        sys.exit(error)
 
     def _load_args(self):
         """Parse and load command-line arguments."""
@@ -263,11 +251,12 @@ class EMDownpourDownloader(object):
 
             # Check for JSON output flag
             if self._args['json']:
-                self.output = self.__class__.JSON
+                self.output = self.JSON
 
     def _load_config(self):
         """Load the user config file data into instance variable."""
-        self.config = yaml.load(open(self.config_file).read())
+        self.config = yaml.load(open(self.config_file).read(),
+                                Loader=yaml.FullLoader)
 
         # Set required fields
         required_fields = ['username', 'password', 'folder', 'filetype']
@@ -276,13 +265,12 @@ class EMDownpourDownloader(object):
         for required in required_fields:
             if (required not in self.config.keys() or
                     self.config[required] is None):
-                error = "Error: configuration field '{0}' is not defined"
-                sys.exit(error.format(required))
+                self._error(f'config field "{required}" is not defined')
 
         # Check that file type is valid
         if self.config['filetype'] not in self.downpour['filetypes']:
-            error = "Error: configuration field 'filetype' must be one of: {0}"
-            sys.exit(error.format(', '.join(self.downpour['filetypes'])))
+            types = ', '.join(self.downpour['filetypes'])
+            self._error(f'config field "filetype" must be one of: {types}')
 
         # Parse config folder path
         self.config['folder_abs'] = os.path.abspath(
@@ -323,53 +311,33 @@ class EMDownpourDownloader(object):
             RequestsCookieJar: Requests session cookie jar object from Downpour
 
         """
-        login_error = 'Error: unable to login to Downpour'
+        login_error = 'unable to login to Downpour'
 
         # Visit Downpour home page
         home = self.session.get(self.downpour['root'].format(''))
-
-        # Set up login URL regex
-        home_regex = r'<a href=\"({0}/.+/)\" >{1}</a>'.format(
-            r'https://www\.downpour\.com/customer/account/login/referer',
-            r'<span>Sign In</span>'
-        )
+        home_soup = BeautifulSoup(home.text, 'html.parser')
 
         # Look for login URL
-        home_match = re.search(home_regex, home.text, re.I)
-        login_url = home_match.group(1)
-
-        # Make sure we got a URL
+        login_link = home_soup.find('a', string='Sign In')
+        login_url = login_link['href']
         if login_url is None:
-            sys.exit(login_error)
+            self._error(login_error, reason='cannot find sign in link')
 
         # Navigate to login page
         post = self.session.get(login_url)
-
-        # Set up post URL regex
-        post_regex = r'<form action="(.+)"\s+{0} {1} {2}>'.format(
-            'method="post"',
-            'id="login-form"',
-            'class="scaffold-form"'
-        )
+        post_soup = BeautifulSoup(post.text, 'html.parser')
 
         # Look for post URL
-        post_match = re.search(post_regex, post.text)
-        post_url = post_match.group(1)
-
-        # Make sure we got a URL
+        login_form = post_soup.find('form', id='login-form')
+        post_url = login_form['action']
         if post_url is None:
-            sys.exit(login_error)
-
-        # Set up form key regex
-        key_regex = r'<input name="form_key" type="hidden" value="(\w+)" />'
+            self._error(login_error, reason='cannot find login form action')
 
         # Look for form key
-        key_match = re.search(key_regex, post.text)
-        form_key = key_match.group(1)
-
-        # Make sure we got a form key
+        form_key_input = post_soup.find('input', attrs={'name': 'form_key'})
+        form_key = form_key_input['value']
         if form_key is None:
-            sys.exit(login_error)
+            self._error(login_error, reason='cannot find login form key')
 
         # Login to Downpour
         login = requests.post(
@@ -389,15 +357,11 @@ class EMDownpourDownloader(object):
             self.downpour['root'].format('my-library'),
             cookies=login.cookies
         )
+        library_soup = BeautifulSoup(library.text, 'html.parser')
 
-        # Set up validation regex
-        valid_regex = r'<a href="{0}" title="Log Out" >'.format(
-            self.downpour['root'].format('customer/account/logout/'),
-        )
-
-        # # Look for login URL
-        if not re.search(valid_regex, library.text, re.I):
-            sys.exit(login_error)
+        # Look for logout URL
+        if not library_soup.find('a', text='Signout'):
+            self._error(login_error, reason='cannot find sign out link')
 
         # Return user cookies
         return library.cookies
@@ -500,13 +464,11 @@ class EMDownpourDownloader(object):
     def _check_folder_permissions(self, folder):
         """Check that folder exists and is writable."""
         if not os.path.exists(folder):
-            error = 'Error: folder does not exist: {0}'
-            sys.exit(error.format(folder))
+            self._error(f'folder does not exist: {folder}')
 
         # Check that directory is readable and writable
         if not os.access(folder, os.W_OK or os.R_OK):
-            error = 'Error: folder does not have read/write permissions: {0}'
-            sys.exit(error.format(folder))
+            self._error(f'unable read/write folder: {folder}')
 
     def _do_action_library(self, output=None):
         """Retrieve a list of the user's Downpour library books.
@@ -532,9 +494,9 @@ class EMDownpourDownloader(object):
             books = books[:self._args['count']]
 
         # If we want a non-CLI response, stop here
-        if output is self.__class__.RAW:
+        if output is self.RAW:
             return books
-        elif output is self.__class__.JSON:
+        elif output is self.JSON:
             return json.dumps(books)
 
         # Set up table headers
@@ -560,7 +522,7 @@ class EMDownpourDownloader(object):
                 book['book_id'],
                 truncate(book['title']),
                 truncate(', '.join(book['author'].split('|'))),
-                '{0} hr'.format(book['runtime']),
+                f'{book["runtime"]} hr',
                 purchase_date.strftime('%d %b %y')
             ])
 
@@ -593,9 +555,9 @@ class EMDownpourDownloader(object):
         book = self.get_book_by_id(book_id)
 
         # If we want a non-CLI response, stop here
-        if output is self.__class__.RAW:
+        if output is self.RAW:
             return book
-        elif output is self.__class__.JSON:
+        elif output is self.JSON:
             return json.dumps(book)
 
         # Get purchase date as datetime object
@@ -607,25 +569,15 @@ class EMDownpourDownloader(object):
 
         # Format book data
         book_data = [
-            form.format(
-                'ID', book['book_id']),
-            form.format(
-                'Title', book['title']),
-            form.format(
-                'Author(s)', ', '.join(book['author'].split('|'))),
-            form.format(
-                'Runtime', '{0} hours'.format(book['runtime'])),
-            form.format(
-                'Purchase Date', purchase_date.strftime('%d %B %Y')),
-            form.format(
-                'Released', 'Yes' if book['is_released'] else 'No'),
-            form.format(
-                'Rental', 'Yes' if book['is_rental'] else 'No'),
-            form.format(
-                'DRM', 'Yes' if book['drm'] else 'No'),
-            form.format(
-                'Link', book['link']
-            )
+            form.format('ID', book['book_id']),
+            form.format('Title', book['title']),
+            form.format('Author(s)', ', '.join(book['author'].split('|'))),
+            form.format('Runtime', f'{book["runtime"]} hours'),
+            form.format('Purchase Date', purchase_date.strftime('%d %B %Y')),
+            form.format('Released', 'Yes' if book['is_released'] else 'No'),
+            form.format('Rental', 'Yes' if book['is_rental'] else 'No'),
+            form.format('DRM', 'Yes' if book['drm'] else 'No'),
+            form.format('Link', book['link'])
         ]
 
         # Return formatted book data
@@ -651,16 +603,16 @@ class EMDownpourDownloader(object):
         # Iterate over book IDs to download
         for idx, book_id in enumerate(book_ids):
             # Print new line between books
-            if idx and output is self.__class__.CLI:
+            if idx and output is self.CLI:
                 print('\n', file=sys.stdout)
 
             # Download selected book
             downloaded_books[book_id] = self.download_book(book_id)
 
         # Output formatted response
-        if output is self.__class__.RAW:
+        if output is self.RAW:
             return downloaded_books
-        elif output is self.__class__.JSON:
+        elif output is self.JSON:
             return json.dumps(downloaded_books)
 
     def do_action(self, action=None):
@@ -676,13 +628,11 @@ class EMDownpourDownloader(object):
 
         # Check for valid action
         if action not in self._script_actions.keys():
-            sys.exit("Error: invalid action: '{0}' (choose from {1})".format(
-                action,
-                ', '.join(self._script_actions.keys())
-            ))
+            choices = ', '.join(self._script_actions.keys())
+            self._error(f'invalid action: "{action}" (choose from {choices})')
 
         # Get function to perform action
-        action_func = '_do_action_{action}'.format(action=action)
+        action_func = f'_do_action_{action}'
 
         # Do action
         if hasattr(self, action_func):
@@ -695,9 +645,7 @@ class EMDownpourDownloader(object):
             dict: Parsed JSON data from API response
 
         """
-        library = self.session.get(
-            self.downpour['root'].format('my-library')
-        )
+        library = self.session.get(self.downpour['root'].format('my-library'))
 
         # Parse HTML
         soup = BeautifulSoup(library.text, 'html.parser')
@@ -707,8 +655,6 @@ class EMDownpourDownloader(object):
             'span',
             attrs={'class': 'product-library-item-link'}
         )
-
-        from pprint import pprint
 
         # Populate book list
         books = []
@@ -767,24 +713,20 @@ class EMDownpourDownloader(object):
         # Make request to get book files download information
         dl_data = self.session.post(
             dp_root.format('my-library/ajax/ajaxGetBookActionOptions'),
-            data={
-                'bookId': book['book_id']
-            },
+            data={'bookId': book['book_id']},
             cookies=self.session.cookies
         )
 
         # Get JSON
         dl_json = dl_data.json()
-
-        # Check for status
         if not dl_json['status']:
-            sys.exit('Error: could not retrieve book download manifest')
+            self._error('could not retrieve book download manifest')
 
         # Get manifest
         manifest = dl_json['manifest']
 
         # Set up file regexes
-        file_regex = r'\.{0}$'.format(self.config['filetype'])
+        file_regex = f'\.{self.config["filetype"]}$'
         file_part_regex = r'^File (\d+) of \d+$'
 
         # Return only correct file type
@@ -795,10 +737,8 @@ class EMDownpourDownloader(object):
 
                 # Parse file part number
                 part = re.match(file_part_regex, file['countOf'], re.I)
-
-                # Check for match
                 if not part:
-                    sys.exit('Error: could not parse book download part')
+                    self._error('could not parse book download part')
 
                 # Set file part number
                 file['part'] = int(part.group(1))
@@ -834,10 +774,8 @@ class EMDownpourDownloader(object):
 
         # Get JSON response
         dl_json = dl_url.json()
-
-        # Check for success
         if not dl_json['status']:
-            sys.exit('Error: could not retrieve the book download URL(s)')
+            self._error('could not retrieve the book download URL(s)')
 
         # Return download URL
         return dl_json['link']
@@ -857,12 +795,7 @@ class EMDownpourDownloader(object):
         # Check for user-specified template
         if ('template' in self.config.keys() and
                 self.config['template'] is not None):
-
-            # Convert str to unicode if this is Python 2
-            if sys.version_info[0] < 3:
-                template = unicode(self.config['template'], 'utf-8')
-            else:
-                template = self.config['template']
+            template = self.config['template']
 
         # Format folder path from template
         book_folder = template.format(
@@ -896,11 +829,9 @@ class EMDownpourDownloader(object):
 
         # Exit if this file already exists
         if os.path.isfile(file_path):
-            if output is self.__class__.CLI:
-                print(
-                    "Warning: file '%s' already exists, skipping" % file_path,
-                    file=sys.stderr
-                )
+            if output is self.CLI:
+                print(f'Warning: file "{file_path}" already exists, skipping',
+                      file=sys.stderr)
             return
 
         # Get download URL
@@ -920,7 +851,7 @@ class EMDownpourDownloader(object):
             chunk_size = 1024
 
             # Determine if we need a progress bar
-            if output is self.__class__.CLI:
+            if output is self.CLI:
                 # Set up progress bar data
                 total_length = int(stream.headers.get('content-length'))
                 expected_size = (total_length / chunk_size) + 1
@@ -940,12 +871,9 @@ class EMDownpourDownloader(object):
                     handle.write(chunk)
                     handle.flush()
 
-        # Set error message:
-        error = 'Error: there was a problem downloading the file: {0}'
-
         # Check that the file was downloaded
         if not os.path.isfile(file_path):
-            sys.exit(error.format(file_path))
+            self._error(f'unable to download file: {file_path}')
 
     def download_book(self, book_id, output=None):
         """Download all available book part files from Downpour.
@@ -978,9 +906,9 @@ class EMDownpourDownloader(object):
         book_path = self.get_book_path(book)
 
         # Print CLI update
-        if output is self.__class__.CLI:
+        if output is self.CLI:
             print(
-                u'== "{title}" by {author} ==\n+ Path: {path}'.format(
+                '== "{title}" by {author} ==\n+ Path: {path}'.format(
                     title=book['title'],
                     author=u', '.join(book['author'].split('|')),
                     path=book_path
@@ -994,7 +922,7 @@ class EMDownpourDownloader(object):
             part = file_data['part']
 
             # Get file part
-            file_part = ', Part {0}'.format(part) if parts > 1 else ''
+            file_part = f', Part {part}' if parts > 1 else ''
 
             # Get file name
             file_name = '{book_title}{file_part}.{file_type}'.format(
@@ -1007,14 +935,9 @@ class EMDownpourDownloader(object):
             file_path = os.path.join(book_path, file_name)
 
             # Print status update
-            if output is self.__class__.CLI:
-                print(
-                    '+ {count}: "{name}"'.format(
-                        count=file_data['countOf'],
-                        name=file_name
-                    ),
-                    file=sys.stdout
-                )
+            if output is self.CLI:
+                print(f'+ {file_data["countOf"]}: "{file_name}"',
+                      file=sys.stdout)
 
             # Download the file
             self.download_book_file(file_data, file_path)
@@ -1035,12 +958,8 @@ class ScriptAction(argparse.Action):
     def __call__(self, argparser, namespace, values, option_string=None):
         """Check that action has book IDs, if-needed."""
         if not len(values) and namespace.action in ['download', 'book']:
-            argparser.error(
-                'Missing book ID{s} for {action}'.format(
-                    action=namespace.action,
-                    s='(s)' if namespace.action == 'download' else ''
-                )
-            )
+            s = '(s)' if namespace.action == 'download' else ''
+            argparser.error(f'Missing book ID{s} for {namespace.action}')
 
         # Set value in namespace object
         setattr(namespace, self.dest, values)
@@ -1055,8 +974,7 @@ class FileAction(argparse.Action):
 
         # Check that file exists
         if not os.path.exists(file_path):
-            error = 'Path provided for {0} {1} {2}'.format(
-                self.dest, 'does not exist:', values)
+            error = f'Path provided for {self.dest} does not exist {values}'
             argparser.error(error)
 
         # Set value in namespace object
@@ -1068,10 +986,10 @@ class DownpourArgumentParser(argparse.ArgumentParser):
 
     def error(self, message):
         """Display a simple help message via stdout before error messages."""
-        sys.stdout.write('Use `%s --help` to view more options\n' % self.prog)
+        sys.stdout.write(f'Use `{self.prog} --help` to view more options\n')
 
         # Display error message and exit
-        sys.exit('Error: {0}'.format(message))
+        sys.exit(f'ERROR: {message}')
 
     def print_help(self, files=None):
         """Make the printed help message look nicer.
@@ -1095,14 +1013,8 @@ def get_version(extra=True):
         str: Formatted program version information
 
     """
-    return '{title} v{version}{extra}\n'.format(
-        title=__title__,
-        version=__version__,
-        extra=' / by {author} <{email}>\n'.format(
-            author=__author__,
-            email=__email__
-        ) if extra else ''
-    )
+    extra = f' / by {__author__} <{__email__}>\n' if extra else ''
+    return f'{__title__} v{__version__}{extra}\n'
 
 
 def truncate(string, length=20):
@@ -1133,11 +1045,18 @@ def truncate(string, length=20):
 
 # Run the script from the command-line
 if __name__ == '__main__':
+    # Start animation
+    wait = animation.Wait(text='loading')
+    wait.start()
+
     # Connect to Downpour object
     EDD = EMDownpourDownloader(output=EMDownpourDownloader.CLI)
 
     # Get output from main function
     __output__ = EDD.do_action()
+
+    # Stop animation
+    wait.stop()
 
     # Check for returned output
     if __output__ is not None:

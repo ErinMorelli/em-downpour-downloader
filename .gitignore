@@ -5,3 +5,5 @@ screenshot.*
 *.tmp
 *.pyc
 test.py
+.env/
+config.yml
