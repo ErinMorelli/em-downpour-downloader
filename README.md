@@ -2,6 +2,10 @@
 
 Download [Downpour.com](#disclaimer) audiobook files.
 
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=ErinMorelli_em-downpour-downloader&metric=alert_status)](https://sonarcloud.io/dashboard?id=ErinMorelli_em-downpour-downloader)
+
+---
+
 ## Installation
 
 1. Download this repository:
