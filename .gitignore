@@ -7,3 +7,4 @@ screenshot.*
 test.py
 .env/
 config.yml
+*.egg-info/

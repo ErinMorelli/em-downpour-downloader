@@ -11,46 +11,44 @@ Download [Downpour.com](#disclaimer) audiobook files.
 1. Download this repository:
 
     ```
-    git clone https://github.com/ErinMorelli/em-downpour-downloader.git
+    $ git clone https://github.com/ErinMorelli/em-downpour-downloader.git
     ```
 
-2. Navigate into the folder created by step 1 and install the required python packages by running `pip`:
+2. Navigate into the folder created by step 1 and install the required python packages by running:
 
     ```
-    pip install -r requirements.txt
+    $ python setup.py install
     ```
 
-3. Create the `downpour-downloader` folder in your home .config directory: 
+3. Run the help command to make sure everything is working and to view the script's options:
 
     ```
-    mkdir -p ~/.config/downpour-downloader
+    $ downpour --help
     ```
 
-4. Open the `sample_config.yml` file with your favorite text editor and configure to suit your needs.
-
-5. Save the file as `config.yml` and move it to the `downpour-downloader` folder you created in step 2:
-    
-    ```
-    mv config.yml ~/.config/downpour-downloader/config.yml
-    ```
-
-6. Run the help command to make sure everything is working and to view the script's options:
+4. Log in to your Downpour account to start using the app:
 
     ```
-    ./downpour.py --help
+    $ downpour account login
     ```
+
+5. Do an initial load of all of your books into the app library by running:
+
+   ```
+   $ downpour books update
+   ```
 
 
 ## Command-line Usage
 
-EM Downpour Download has three commands you can use to view and download your audiobook files:
+EM Downpour Download has many commands you can use to view and download your audiobook files:
 
 ### Library
 
 View a list of all available audiobooks associated with your Downpour account:
 
 ```
-./downpour.py library
+$ downpour books list
 ```
 
 
@@ -59,7 +57,7 @@ View a list of all available audiobooks associated with your Downpour account:
 View additional information about a specific book by providing the book's `ID`, which is listed in the `library` command's output:
 
 ```
-./downpour.py book abc1
+$ downpour books show abc1
 ```
 
 
@@ -68,13 +66,13 @@ View additional information about a specific book by providing the book's `ID`, 
 Download an audiobook's files by providing the `ID`:
 
 ```
-./downpour.py download abc1
+$ downpour books download abc1
 ```
 
 To download multiple audiobooks at once, you can specify additional `ID` values separated by a space:
 
 ```
-./downpour.py download abc1 def2 ghi3
+$ downpour books download abc1 def2 ghi3
 ```
 
 
