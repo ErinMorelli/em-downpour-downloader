@@ -98,7 +98,7 @@ class DownpourDownloader:
         # Reflect metadata so auto-mapping works
         self._metadata.reflect(self._engine)
         # Make sure the tables exist
-        self._metadata.create_all()
+        self._metadata.create_all(self._engine)
 
     def get_session(self):
         """Create a new database session using the session maker."""

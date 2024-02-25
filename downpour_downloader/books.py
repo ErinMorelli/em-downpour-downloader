@@ -101,7 +101,9 @@ class BooksContent(DownpourContent):
 
         # Setup dates
         purchase_date = parser.parse(attrs['data-purchase-date'])
-        release_date = parser.parse(attrs['data-release-date']).date()
+        release_date = parser.parse(attrs['data-release-date']).date() if attrs['data-release-date'] else None
+
+        image = book.find('img')
 
         # Return the new book object
         return self.model(
@@ -117,7 +119,7 @@ class BooksContent(DownpourContent):
             release_date=release_date,
             runtime=0 if runtime == '' else float(runtime),
             url=attrs['data-href'],
-            cover=book.find('img').attrs['src']
+            cover=image.attrs.get('src') or ("https:" + image.attrs.get('data-src'))
         )
 
     def _get_book_file_data(self, account, book, file_type):
@@ -315,7 +317,7 @@ class BooksContent(DownpourContent):
             Column('is_released', Boolean),
             Column('is_rental', Boolean),
             Column('purchase_date', DateTime, nullable=False),
-            Column('release_date', Date, nullable=False),
+            Column('release_date', Date, nullable=True),
             Column('runtime', Float, nullable=False),
             Column('url', URLType, nullable=False),
             Column('cover', URLType, nullable=False),

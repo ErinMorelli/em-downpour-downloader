@@ -203,7 +203,7 @@ class DownpourContent:
             return None
 
         # Check for success
-        if not login_soup.find('a', string='Signout'):
+        if not login_soup.find('a', title='Log Out'):
             self.manager.error('Unable to login: invalid login or password')
             return None
 
